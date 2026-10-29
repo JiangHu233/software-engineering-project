@@ -1,12 +1,12 @@
 flowchart TD
     Start((●)) --> Board[管理员打开实时座位看板 FR-18<br/>查看 空闲/已预约/使用中/停用]
-    Board --> Found{发现"使用中"座位违规?<br/>无人/占座/非本人使用}
+    Board --> Found{发现“使用中”座位违规?<br/>无人/占座/非本人使用}
     Found -->|否| Record[查看座位使用与预约记录 FR-17<br/>复盘争议] --> End0((◉))
     Found -->|是| Detail[进入座位详情<br/>查看当前使用人必要信息]
-    Detail --> Reg[点击"登记违约"<br/>填写类型与原因(必填) BR-11]
-    Reg --> VChk{权限通过 且<br/>预约单状态="已签到"?}
+    Detail --> Reg["点击“登记违约”<br/>填写类型与原因(必填) BR-11"]
+    Reg --> VChk{权限通过 且<br/>预约单状态=“已签到”?}
     VChk -->|否| VDeny[拒绝登记并提示原因<br/>状态保持原值 UC-04 异常流程] --> End0
-    VChk -->|是| Manual[生成"手动违约"记录<br/>含操作人/时间/原因, 留痕 BR-12<br/>预约单→已违约 ST-06<br/>座位→空闲 ST-12, 违约分+1 C-4/C-5]
+    VChk -->|是| Manual[生成“手动违约”记录<br/>含操作人/时间/原因, 留痕 BR-12<br/>预约单→已违约 ST-06<br/>座位→空闲 ST-12, 违约分+1 C-4/C-5]
     Manual --> Count[系统按学期滚动累计违约分 C-5]
     Count --> Threshold{学期内违约分 ≥ 3? C-6}
     Threshold -->|否| Notify[推送违约通知] --> End0
