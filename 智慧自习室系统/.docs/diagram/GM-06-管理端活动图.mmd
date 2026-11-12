@@ -1,0 +1,25 @@
+flowchart TD
+    Start((●)) --> Board[管理员打开实时座位看板 FR-18<br/>查看 空闲/已预约/使用中/停用]
+    Board --> Found{发现“使用中”座位违规?<br/>无人/占座/非本人使用}
+    Found -->|否| Record[查看座位使用与预约记录 FR-17<br/>复盘争议] --> End0((◉))
+    Found -->|是| Detail[进入座位详情<br/>查看当前使用人必要信息]
+    Detail --> Reg["点击“登记违约”<br/>填写类型与原因(必填) BR-11"]
+    Reg --> VChk{权限通过 且<br/>预约单状态=“已签到”?}
+    VChk -->|否| VDeny[拒绝登记并提示原因<br/>状态保持原值 UC-04 异常流程] --> End0
+    VChk -->|是| Manual[生成“手动违约”记录<br/>含操作人/时间/原因, 留痕 BR-12<br/>预约单→已违约 ST-06<br/>座位→空闲 ST-12, 违约分+1 C-4/C-5]
+    Manual --> Count[系统按学期滚动累计违约分 C-5]
+    Count --> Threshold{学期内违约分 ≥ 3? C-6}
+    Threshold -->|否| Notify[推送违约通知] --> End0
+    Threshold -->|是 且不在黑名单| AddBL[自动加入黑名单 ST-13<br/>限制期=7天×进入次数, 上限30天<br/>推送加入通知 FR-30]
+    AddBL --> BLPeriod{限制期处理}
+    BLPeriod -->|到期| Release[定时任务自动解除 ST-14<br/>恢复预约资格, 推送通知]
+    BLPeriod -->|学生申诉且管理员判定成立| EarlyRel[管理员提前解除<br/>填写理由并留痕 FR-29]
+    BLPeriod -->|限制期内| Block[新预约在 UC-01 第 4 步被拦截 UC-12]
+    Release --> End0
+    EarlyRel --> End0
+    Block --> End0
+    Board -.座位故障.-> Stop[停用座位 UC-07<br/>座位→停用]
+    Stop --> AutoCancel[自动取消未来未开始时段的预约<br/>并通知 FR-06<br/>已签到/使用中的处理见 KQ-07]
+    AutoCancel --> End0
+    Board -.-> Complaint[处理投诉: 受理→处理中→填写结果<br/>→已反馈, 结果推送投诉人 UC-05]
+    Complaint --> End0
