@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}知时 · 自习室{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="{{ url_for('home') if current_user.is_authenticated else url_for('login') }}"><span class="brand-mark">知</span><span>知时 <small>STUDY SPACE</small></span></a>
+{% if current_user.is_authenticated %}<nav><a href="{{ url_for('home') }}">座位预约</a>{% if current_user.role == 'admin' %}<a href="{{ url_for('admin_dashboard') }}">管理台</a>{% endif %}</nav><div class="account"><span>{{ current_user.display_name }} <small>{{ '管理员' if current_user.role == 'admin' else '学生' }}</small></span><form method="post" action="{{ url_for('logout') }}"><button class="link-button">退出</button></form></div>{% endif %}</header>
+<main class="container">
+{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="notices">{% for category, message in messages %}<div class="notice {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}{% endwith %}
+{% block content %}{% endblock %}
+</main><footer>智慧自习室预约与管理系统 <span>本地演示版 · 无外部 AI 服务</span></footer>
+</body></html>
