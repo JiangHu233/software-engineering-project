@@ -12,6 +12,9 @@
 | TASK-S1-02 | `TASK-S1-02.md` | S1 | 看座位→约→取消→他人能约到，7 条拒绝原因可区分 | 待准备 |
 | TASK-S1-03 | `TASK-S1-03.md` | S1 | 真实多线程/多进程并发下恰好一方成功 | 待准备 |
 | TASK-S1-04 | `TASK-S1-04.md` | S1 | 停用座位后未来预约全部取消且不记违约 | 待准备 |
+| TASK-S1-05 | `TASK-S1-05.md` | S1 | 27 条错误码落成唯一字典 + 统一错误包 | 已分发（开发A） |
+| TASK-S1-06 | `TASK-S1-06.md` | S1 | 分页参数解析与分页 meta 只有一份实现 | 已分发（开发B） |
+| TASK-S1-07 | `TASK-S1-07.md` | S1 | 业务时钟与 ISO 时间格式（含 24:00）统一 | 已分发（开发C） |
 | TASK-S2-01 | `TASK-S2-01.md` | S2 | 越权 100% 被拒并留痕；黑名单只拦新预约 | 待准备 |
 | TASK-S2-02 | `TASK-S2-02.md` | S2 | 签到窗口边界正确、早退判定与违约记录一致 | 待准备 |
 | TASK-S2-03 | `TASK-S2-03.md` | S2 | 手动违约只记 1 条、分数与黑名单口径唯一 | 待准备 |
@@ -30,3 +33,20 @@ TASK-S1-01 ──► TASK-S2-01 ──► TASK-S2-02 ──► TASK-S2-03 ──
 
 - 可并行的两组：`S1-02` 与 `S1-04`（改不同模块），`S2-04` 与 `S2-05`（任务层 vs 座位维护）。
 - `TASK-S2-05` 建议尽量前移：ADR-2 的缺陷已被复现，越晚修，S1 的停用功能越容易被误认为"已完成"。
+- `S1-05`/`S1-06`/`S1-07` 为契约公共层，互不依赖、各自新建文件，可与其他任务并行；建议先于 `S1-01` 完成。
+
+## 本轮分发记录（2026-11-26）
+
+> 三张卡均为 5 分钟级，互不依赖、各自新建文件，可三人并行；约定实现目录 `backend/`
+> （与冻结原型 `src/` 隔离），空骨架 `backend/app/contracts/` 与 `backend/pytest.ini`
+> 已由分发人建好。若团队后续统一目录，仅移动文件，不改任务内容。
+> 若本机未装 pytest：先 `python -m pip install pytest`（一次即可）。
+
+| 任务 | 负责人 | 预计耗时 | 交付物 | 验收命令（在 `backend/` 下运行） | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| TASK-S1-05 | 开发A | 5 分钟 | `backend/app/contracts/errors.py` + 测试 | `python -m pytest tests/contracts/test_errors.py -q` | 已分发 |
+| TASK-S1-06 | 开发B | 5 分钟 | `backend/app/contracts/pagination.py` + 测试 | `python -m pytest tests/contracts/test_pagination.py -q` | 已分发 |
+| TASK-S1-07 | 开发C | 5 分钟 | `backend/app/contracts/timeutil.py` + 测试 | `python -m pytest tests/contracts/test_timeutil.py -q` | 已分发 |
+
+**完成动作**：跑绿上述命令 → 把输出贴到 PR/Issue → 把本表状态改为"待审查" →
+审查人（另一成员）看 diff 后改为"已完成"。若触发卡内"停止条件"，停在原处并反馈，不自行改契约。
