@@ -1,0 +1,35 @@
+============================= test session starts =============================
+collecting ... collected 22 items
+
+tests/test_concurrency.py::test_dataset_scale_matches_av01 PASSED        [  4%]
+tests/test_concurrency.py::test_dataset_build_is_idempotent PASSED       [  9%]
+tests/test_concurrency.py::test_dataset_seat_ids_are_unique_and_ordered PASSED [ 13%]
+tests/test_concurrency.py::test_dataset_rooms_are_distinct PASSED        [ 18%]
+tests/test_concurrency.py::test_dataset_spec_is_immutable PASSED         [ 22%]
+tests/test_concurrency.py::test_threads_two_racers_50_rounds PASSED      [ 27%]
+tests/test_concurrency.py::test_threads_three_racers_single_winner PASSED [ 31%]
+tests/test_concurrency.py::test_threads_exactly_one_occupancy_row PASSED [ 36%]
+tests/test_concurrency.py::test_threads_different_seats_both_succeed PASSED [ 40%]
+tests/test_concurrency.py::test_threads_same_student_same_slot_blocked PASSED [ 45%]
+tests/test_concurrency.py::test_threads_cross_room_seats_independent PASSED [ 50%]
+tests/test_concurrency.py::test_processes_two_racers_10_rounds PASSED    [ 54%]
+tests/test_concurrency.py::test_processes_db_has_single_occupancy PASSED [ 59%]
+tests/test_concurrency.py::test_processes_three_racers_single_winner PASSED [ 63%]
+tests/test_concurrency.py::test_conflict_only_for_overlapping_slot PASSED [ 68%]
+tests/test_concurrency.py::test_repeat_idempotency_key_returns_same_result PASSED [ 72%]
+tests/test_concurrency.py::test_failed_racer_leaves_no_reservation PASSED [ 77%]
+tests/test_concurrency.py::test_racer_cannot_hold_two_seats_concurrently PASSED [ 81%]
+tests/test_concurrency.py::test_seat_state_must_be_available PASSED      [ 86%]
+tests/test_concurrency.py::test_racers_see_consistent_winner_across_views PASSED [ 90%]
+tests/test_concurrency.py::test_harness_reports_worker_identity PASSED   [ 95%]
+tests/test_concurrency.py::test_no_connection_to_default_instance_db PASSED [100%]
+
+============================= 22 passed in 43.93s =============================
+========================================
+提交标识:   cb6639f
+分支:       task/TASK-S0-01
+环境:       Python 3.14.0 / Flask 3.1.3 / SQLAlchemy 2.1.9 / pytest 8.4.2 / Windows
+命令:       ./.venv/Scripts/python.exe -m pytest tests/test_concurrency.py -v
+数据集:     tests/dataset.py DATASET_SPEC v1（2x30、3 学生、1 管理员）
+========================================
+结论:       通过（22/22）
