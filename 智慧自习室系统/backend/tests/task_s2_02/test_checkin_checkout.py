@@ -1,7 +1,7 @@
 """API-08 签到 / API-09 签退：窗口双端边界、早退 D-8、seatFreedFrom 三例。"""
 from datetime import datetime, timedelta
 
-from conftest import book, day, ik, shift_reservation
+from tests.conftest import book, day, ik, shift_reservation
 
 
 def _setup_window(app, client, headers, seat_id, minutes_until_start):
@@ -81,32 +81,26 @@ def test_checkout_normal_no_violation(app, client, stu_headers, room_and_seat):
 
 
 def test_checkout_early_leave_strict_less(app, client, stu_headers, room_and_seat):
-    """D-8：now < ends-30min 才记违约；恰好 30 分钟不记。"""
-    _, seat_id = room_and_seat
+    """D-8：now < ends-30min 才记违约；恰好 30 分钟不记。
+
+    用 _make_checked_in 直接置 CHECKED_IN（避开已关闭的签到窗口构造场景）；两个场景
+    分占两个座位，避免同座位同整点撞 seat_occupancy 唯一约束（U-1）。
+    """
+    room_id, seat_id = room_and_seat
     # 场景 A：31 分钟后结束 → 记违约
-    rid = _setup_window(app, client, stu_headers, seat_id, minutes_until_start=-61)
-    client.post(f"/api/v1/reservations/{rid}/check-in",
-                headers={**stu_headers, "Idempotency-Key": ik()})
-    from studyroom.extensions import db as _db
-    from studyroom.models import Reservation
-    with client.application.app_context():
-        _db.session.get(Reservation, rid).ends_at = datetime.now() + timedelta(minutes=31)
-        _db.session.commit()
+    rid = _make_checked_in(app, client, stu_headers, seat_id,
+                           starts_at=datetime.now() - timedelta(minutes=120),
+                           ends_at=datetime.now() + timedelta(minutes=31))
     r = client.post(f"/api/v1/reservations/{rid}/check-out",
                     headers={**stu_headers, "Idempotency-Key": ik()})
     d = r.get_json()["data"]
     assert r.status_code == 200 and d["early"] is True and d["violationCreated"] is True
 
-    # 场景 B：恰好 30 分钟 → 不记（Q-03 裁决 C，操作符翻转验证）
-    rid2 = _setup_window(app, client, stu_headers, seat_id, minutes_until_start=-61)
-    client.post(f"/api/v1/reservations/{rid2}/check-in",
-                headers={**stu_headers, "Idempotency-Key": ik()})
-    with client.application.app_context():
-        base = datetime.now()
-        res = _db.session.get(Reservation, rid2)
-        res.ends_at = base.replace(microsecond=0) + timedelta(minutes=30)
-        _db.session.commit()
-        # 对齐到整秒避免抖动：把 now 推到恰好 (ends-30min) 的边界内一点
+    # 场景 B：恰好 30 分钟 → 不记（Q-03 裁决 C，操作符翻转验证；另用一座位避免占用冲突）
+    seat_b = _add_seat(client, room_id)
+    rid2 = _make_checked_in(app, client, stu_headers, seat_b,
+                            starts_at=datetime.now() - timedelta(minutes=120),
+                            ends_at=datetime.now().replace(microsecond=0) + timedelta(minutes=30))
     r2 = client.post(f"/api/v1/reservations/{rid2}/check-out",
                      headers={**stu_headers, "Idempotency-Key": ik()})
     d2 = r2.get_json()["data"]
@@ -115,9 +109,9 @@ def test_checkout_early_leave_strict_less(app, client, stu_headers, room_and_sea
 
 def test_checkout_after_end_rejected(app, client, stu_headers, room_and_seat):
     _, seat_id = room_and_seat
-    rid = _setup_window(app, client, stu_headers, seat_id, minutes_until_start=-120)
-    client.post(f"/api/v1/reservations/{rid}/check-in",
-                headers={**stu_headers, "Idempotency-Key": ik()})
+    rid = _make_checked_in(app, client, stu_headers, seat_id,
+                           starts_at=datetime.now() - timedelta(minutes=120),
+                           ends_at=datetime.now() - timedelta(minutes=1))
     # ends_at 已过 → 422 CHECKOUT_NOT_ALLOWED（超时归 T-2）
     r = client.post(f"/api/v1/reservations/{rid}/check-out",
                     headers={**stu_headers, "Idempotency-Key": ik()})
@@ -129,7 +123,7 @@ def test_seat_freed_from_semantics(app, client, stu_headers, room_and_seat):
     """Q-05：只释放 slot_start > now 的后续整点。
     构造：starts_at = 当前整点 H，共 3 格 [H,H+1,H+2]，now 落在 H 之后 → 释放 H+1 起；
     单小时预约 → 恒 null。"""
-    _, seat_id = room_and_seat
+    room_id, seat_id = room_and_seat
     hour_start = datetime.now().replace(minute=0, second=0, microsecond=0)
     rid = _make_checked_in(app, client, stu_headers, seat_id,
                            starts_at=hour_start, ends_at=hour_start + timedelta(hours=3))
@@ -145,8 +139,9 @@ def test_seat_freed_from_semantics(app, client, stu_headers, room_and_seat):
         freed = datetime.fromisoformat(d["seatFreedFrom"])
         assert freed > hour_start  # 只会释放更晚的整点
 
-    # 单小时预约：唯一格子是当前所在整点 → 无格可删
-    rid2 = _make_checked_in(app, client, stu_headers, seat_id,
+    # 单小时预约：唯一格子是当前所在整点 → 无格可删（换一座位避免占用冲突）
+    seat2 = _add_seat(client, room_id)
+    rid2 = _make_checked_in(app, client, stu_headers, seat2,
                             starts_at=hour_start, ends_at=hour_start + timedelta(hours=1))
     r2 = client.post(f"/api/v1/reservations/{rid2}/check-out",
                      headers={**stu_headers, "Idempotency-Key": ik()})
@@ -171,6 +166,17 @@ def _make_checked_in(app, client, headers, seat_id, starts_at, ends_at):
     return rid
 
 
+def _add_seat(client, room_id, label="T02"):
+    """在 room_and_seat 的房间里再建一个可用座位，用于需第二个独立座位的场景。"""
+    from studyroom.models import Seat
+    from studyroom.extensions import db as _db
+    with client.application.app_context():
+        s = Seat(room_id=room_id, label=label, zone="A区", state="AVAILABLE")
+        _db.session.add(s)
+        _db.session.commit()
+        return s.id
+
+
 def test_checkout_terminal_state_409(app, client, stu_headers, room_and_seat):
     _, seat_id = room_and_seat
     rid = _setup_window(app, client, stu_headers, seat_id, minutes_until_start=0)
@@ -182,3 +188,25 @@ def test_checkout_terminal_state_409(app, client, stu_headers, room_and_seat):
                     headers={**stu_headers, "Idempotency-Key": ik()})
     assert r.status_code == 409
     assert r.get_json()["error"]["code"] == "RESERVATION_STATE_CONFLICT"
+
+
+def test_checkin_other_user_forbidden(app, client, stu_headers, stu2_headers, room_and_seat):
+    """他人对本人预约签到 → 403 FORBIDDEN_OBJECT（对象归属，不掩 404）。"""
+    _, seat_id = room_and_seat
+    rid = _setup_window(app, client, stu_headers, seat_id, minutes_until_start=0)
+    r = client.post(f"/api/v1/reservations/{rid}/check-in",
+                    headers={**stu2_headers, "Idempotency-Key": ik()})
+    assert r.status_code == 403
+    assert r.get_json()["error"]["code"] == "FORBIDDEN_OBJECT"
+
+
+def test_checkout_other_user_forbidden(app, client, stu_headers, stu2_headers, room_and_seat):
+    """他人对本人预约签退 → 403 FORBIDDEN_OBJECT。"""
+    _, seat_id = room_and_seat
+    rid = _make_checked_in(app, client, stu_headers, seat_id,
+                           starts_at=datetime.now() - timedelta(minutes=5),
+                           ends_at=datetime.now() + timedelta(minutes=60))
+    r = client.post(f"/api/v1/reservations/{rid}/check-out",
+                    headers={**stu2_headers, "Idempotency-Key": ik()})
+    assert r.status_code == 403
+    assert r.get_json()["error"]["code"] == "FORBIDDEN_OBJECT"

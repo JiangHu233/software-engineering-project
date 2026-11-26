@@ -1,7 +1,7 @@
 """API-04/05：字段白名单、C-7 聚合优先级、日期越界、ROOM_CLOSED。"""
 from datetime import timedelta
 
-from conftest import book, day, ik
+from tests.conftest import book, day, ik
 
 
 def test_seat_response_field_whitelist(client, stu_headers, room_and_seat):
@@ -71,6 +71,8 @@ def test_room_404_and_room_closed(client, stu_headers, room_and_seat):
     with client.application.app_context():
         _db.session.get(Room, room_id).active = False
         _db.session.commit()
+    # 与外层 fixture 会话同根因：expire 掉 identity map，避免请求读到陈旧的 room.active=True
+    _db.session.expire_all()
     r = client.get(f"/api/v1/seats/{seat_id}/availability?date={day(1)}", headers=stu_headers)
     assert r.status_code == 200
     assert all(s["status"] == "ROOM_CLOSED" for s in r.get_json()["data"]["slots"])

@@ -24,9 +24,9 @@ import pytest
 from studyroom.extensions import db as _db
 from studyroom.models import ACTIVE_STATUSES, Reservation, Seat, SeatOccupancy
 
-from dataset import (DATASET_SPEC, STUDENT_PASSWORD, STUDENT_USERNAMES,
+from tests.task_s0_01.dataset import (DATASET_SPEC, STUDENT_PASSWORD, STUDENT_USERNAMES,
                      build_dataset, pick_seat, slot_tomorrow, verify_dataset)
-from concurrency_harness import (active_occupancy_for, count_active_reservations,
+from tests.task_s0_01.concurrency_harness import (active_occupancy_for, count_active_reservations,
                                  db_uri_for, ensure_fresh_db, run_round_processes,
                                  run_round_threads)
 

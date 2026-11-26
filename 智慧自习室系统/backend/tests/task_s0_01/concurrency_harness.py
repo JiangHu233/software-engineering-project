@@ -43,6 +43,8 @@ class AttemptResult:
     ok: bool
     status_code: int = 0
     error_code: str = ""
+    error_message: str = ""
+    error_fields: dict | None = None
     reservation_id: int | None = None
     started_at: float = 0.0
     finished_at: float = 0.0
@@ -123,6 +125,8 @@ def attempt_booking(app, username: str, password: str, seat_id: int,
         else:
             err = body.get("error") or {}
             res.error_code = err.get("code", "")
+            res.error_message = err.get("message", "")
+            res.error_fields = err.get("fields")
     except Exception as exc:  # 线程内异常必须带回主线程，不能吞掉
         res.exception = f"{type(exc).__name__}: {exc}"
         res.error_code = "EXCEPTION"
@@ -195,7 +199,8 @@ def _proc_worker(seat_id: int, starts_at_iso: str, ends_at_iso: str,
                               starts_at, ends_at, worker=worker)
         out.put({
             "worker": res.worker, "ok": res.ok, "status_code": res.status_code,
-            "error_code": res.error_code, "reservation_id": res.reservation_id,
+            "error_code": res.error_code, "error_message": res.error_message,
+            "error_fields": res.error_fields, "reservation_id": res.reservation_id,
             "exception": res.exception,
         })
     except Exception as exc:
@@ -233,6 +238,8 @@ def run_round_processes(db_uri: str, seat_id: int, starts_at: datetime,
         result.attempts.append(AttemptResult(
             worker=payload["worker"], ok=payload["ok"],
             status_code=payload["status_code"], error_code=payload["error_code"],
+            error_message=payload.get("error_message", ""),
+            error_fields=payload.get("error_fields"),
             reservation_id=payload.get("reservation_id"),
             exception=payload.get("exception", ""),
         ))

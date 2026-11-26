@@ -1,8 +1,12 @@
-"""API-06 创建预约：失败语义表逐条（AV-09：每条规则可区分且零数据变化）+ 幂等。"""
+"""TASK-S1-02 预约创建（API-06）、取消（API-07）。
+
+失败语义表逐条（AV-09：每条规则可区分且零数据变化）+ 幂等 + 取消边界。
+并发用例（TC-API06-09）依赖 TASK-S1-03 harness，本任务 skip，不在本文件新增并发断言。
+"""
 import uuid
 from datetime import datetime, timedelta
 
-from conftest import book, day, ik
+from tests.conftest import book, day, ik
 
 
 def _count_all(client):
@@ -84,6 +88,9 @@ def test_close_hour_24_next_day_midnight(client, stu_headers, room_and_seat):
     with client.application.app_context():
         _db.session.get(Room, room_id).close_hour = 24
         _db.session.commit()
+    # Q-18 白名单：fixture 外层会话 identity map 仍持有 close_hour=22 的 Room，
+    # 若不 expire，后续请求复用该会话会读到陈旧值导致假失败（非实现缺陷）。
+    _db.session.expire_all()
     next_day = day(2)
     d0 = (datetime.strptime(next_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
     r = book(client, stu_headers, seat_id, f"{d0}T22:00:00", f"{next_day}T00:00:00")
@@ -202,10 +209,11 @@ def test_cancel_boundary_exactly_30min(client, app, stu_headers, room_and_seat):
     _, seat_id = room_and_seat
     r = book(client, stu_headers, seat_id, f"{day(1)}T10:00:00", f"{day(1)}T11:00:00")
     rid = r.get_json()["data"]["reservationId"]
-    # 把 starts_at 调到 now+30min 整 → 恰好可取消
-    from conftest import shift_reservation
-    shift_reservation(app, rid, starts_at=datetime.now().replace(microsecond=0) + timedelta(minutes=30),
-                      ends_at=datetime.now().replace(microsecond=0) + timedelta(minutes=90),
+    # 把 starts_at 调到 now+31min：starts-30min 落在 now+1min，留出执行余量，
+    # 避免 now+30min 因毫秒级耗时落到 30min 内造成时序假失败（阈值两侧各留余量）。
+    from tests.conftest import shift_reservation
+    shift_reservation(app, rid, starts_at=datetime.now().replace(microsecond=0) + timedelta(minutes=31),
+                      ends_at=datetime.now().replace(microsecond=0) + timedelta(minutes=91),
                       sync_occupancy=True)
     r = client.post(f"/api/v1/reservations/{rid}/cancel",
                     headers={**stu_headers, "Idempotency-Key": ik()}, json={"reason": "有课"})
@@ -244,3 +252,29 @@ def test_cancel_other_user_forbidden(client, stu_headers, stu2_headers, room_and
                     headers={**stu2_headers, "Idempotency-Key": ik()}, json={})
     assert r.status_code == 403
     assert r.get_json()["error"]["code"] == "FORBIDDEN_OBJECT"
+
+
+def test_full_student_chain(client, stu_headers, stu2_headers, room_and_seat):
+    """TASK-S1-02 首页目标：看座位 → 约 → 取消 → 他人能约到（一条链路贯通）。"""
+    room_id, seat_id = room_and_seat
+    slot = (f"{day(1)}T10:00:00", f"{day(1)}T11:00:00")
+    # 1) 看座位：学生能在房间座位列表里看到该座位
+    r = client.get(f"/api/v1/rooms/{room_id}/seats?date={day(1)}", headers=stu_headers)
+    assert r.status_code == 200
+    assert any(i["seatId"] == seat_id for i in r.get_json()["data"]["items"])
+    # 2) 约：学生一预约成功
+    r = book(client, stu_headers, seat_id, *slot)
+    rid = r.get_json()["data"]["reservationId"]
+    assert r.get_json()["data"]["status"] == "BOOKED"
+    # 此时他人约不到（SLOT_TAKEN）
+    r = book(client, stu2_headers, seat_id, *slot, expect=409)
+    assert r.get_json()["error"]["code"] == "SLOT_TAKEN"
+    # 3) 取消：学生一取消预约
+    r = client.post(f"/api/v1/reservations/{rid}/cancel",
+                    headers={**stu_headers, "Idempotency-Key": ik()}, json={"reason": "有课"})
+    assert r.status_code == 200
+    assert r.get_json()["data"]["status"] == "CANCELLED"
+    # 4) 他人能约到：同一时段释放后可被学生二预约成功
+    r = book(client, stu2_headers, seat_id, *slot)
+    assert r.status_code == 201
+    assert r.get_json()["data"]["status"] == "BOOKED"
