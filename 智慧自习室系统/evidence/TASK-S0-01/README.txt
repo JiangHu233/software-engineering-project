@@ -4,14 +4,14 @@ TASK-S0-01 交付说明与结论
 一、交付物
     backend/tests/dataset.py               合成数据集（AV-01 口径：2 房间 × 30 座、3 学生、1 管理员）
     backend/tests/concurrency_harness.py   并发工装（真实文件库 + 线程/进程独立连接）
-    backend/tests/test_concurrency.py      22 个用例（含任务卡要求的两组必执行用例）
+    backend/tests/test_concurrency.py      10 个用例（含任务卡要求的两组必执行用例）
     evidence/TASK-S0-01/                   本目录
 
 二、必须执行的两组用例及结果
 
   1) 单进程组：2 线程 × 50 轮，每轮新座位
      用例：test_threads_two_racers_50_rounds
-     结果：22/22 通过（其中该用例覆盖 50 轮全部成功数 == 1）
+     结果：10/10 通过（含该用例覆盖 50 轮全部成功数 == 1）
      用时：约 44 秒（整份 test_concurrency.py）
 
   2) 多进程组：2 进程 × 10 轮
