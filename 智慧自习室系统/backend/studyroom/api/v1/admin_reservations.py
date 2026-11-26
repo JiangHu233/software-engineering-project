@@ -10,7 +10,7 @@ from ...core.errors import ApiError
 from ...core.pagination import apply_sort, parse_enum_list, parse_from_to, parse_pagination
 from ...core.responses import ok, page_meta, created
 from ...extensions import db
-from ...models import Reservation, Seat, User, Violation, VK_ON_SITE
+from ...models import Reservation, Seat, User, Violation, VK_ON_SITE, add_audit
 from ...schemas.common import field_str, get_json
 from ...services import board_service, violation_service
 from ...services.timeutil import iso
@@ -60,6 +60,11 @@ def register_violation(reservation_id: int):
     if reservation is None:
         raise ApiError("NOT_FOUND")
     if reservation.status != "CHECKED_IN":  # BR-11：仅"已签到"
+        # TC-API16-07：失败登记同样留痕（"1 成功 1 失败"审计），先落库再拒绝。
+        with immediate_transaction():
+            add_audit("VIOLATION_REJECTED", target_type="reservation",
+                      target_id=reservation.id,
+                      result_code="RESERVATION_STATE_CONFLICT")
         raise ApiError("RESERVATION_STATE_CONFLICT",
                        message="仅能对正在使用中的预约登记违约。",
                        fields={"currentStatus": reservation.status})

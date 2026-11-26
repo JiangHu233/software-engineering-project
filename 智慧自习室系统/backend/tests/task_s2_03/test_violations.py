@@ -93,6 +93,9 @@ def test_duplicate_registration_single_violation(app, client, stu_headers, adm_h
     with client.application.app_context():
         assert Violation.query.count() == 1
         assert Blacklist.query.count() == 0  # 重复登记不额外计分/进名单
+        # TC-API16-07：审计 2 条 = 1 成功(VIOLATION_MANUAL) + 1 失败(VIOLATION_REJECTED)
+        assert AuditLog.query.filter_by(action="VIOLATION_MANUAL").count() == 1
+        assert AuditLog.query.filter_by(action="VIOLATION_REJECTED").count() == 1
 
 
 def test_successful_registration_writes_audit(app, client, stu_headers, adm_headers,
