@@ -1,0 +1,57 @@
+%% GM-04 智慧自习室预约与管理系统 用例图
+%% 建模对象：系统级用例与参与者关系
+%% 关联需求：FR-01～FR-35；关联用例：UC-01～UC-15
+%% 关联文档：需求分析.md 用户需求 §5.1
+%% 说明：Mermaid 无原生 UML 用例图语法，本图用 flowchart 表达用例关系，
+%%       导出时须在图注中注明"用例关系示意图"，并在导出前检查 include/extend 标注可读。
+flowchart LR
+    Student["参与者：学生用户"]
+    Admin["参与者：自习室管理员"]
+    Timer["参与者：系统定时任务"]
+    Ops["参与者：运维（OPS）"]
+    Auth["外部系统：校园统一认证<br/>（AI候选，待确认 KQ-12）"]
+
+    subgraph System["智慧自习室预约与管理系统"]
+        UC01(("UC-01 预约座位"))
+        UC02(("UC-02 取消预约"))
+        UC03(("UC-03 签到/签退/<br/>自动违约判定"))
+        UC04(("UC-04 实时座位监控<br/>与手动违约登记"))
+        UC05(("UC-05 投诉提交<br/>与处理反馈"))
+        UC06(("UC-06 违约累计与<br/>黑名单加入/解除"))
+        UC07(("UC-07 座位停用<br/>与存量预约处置"))
+        UC08(("UC-08 分析看板查看<br/>与自动刷新"))
+        UC09(("UC-09 使用评价提交<br/>与违规评价处理"))
+        UC10(("UC-10 座位资源维护"))
+        UC11(("UC-11 越权调用拒绝"))
+        UC12(("UC-12 黑名单用户<br/>的预约拦截"))
+        UC13(("UC-13 并发抢占<br/>同一座位时段"))
+        UC14(("UC-14 定时任务<br/>异常与补救"))
+        UC15(("UC-15 管理员代约<br/>已确认允许，P-8"))
+    end
+
+    Student --> UC01
+    Student --> UC02
+    Student --> UC03
+    Student --> UC05
+    Student --> UC09
+    Student --> UC12
+    Student --> UC13
+    Admin --> UC04
+    Admin --> UC05
+    Admin --> UC07
+    Admin --> UC08
+    Admin --> UC10
+    Admin -.-> UC06
+    Admin -.-> UC15
+    Timer --> UC03
+    Timer --> UC06
+    Ops --> UC14
+    Auth -.-> UC01
+
+    UC01 -.->|"include"| UC12
+    UC02 -.->|"include"| UC13
+    UC01 -.->|"include"| UC13
+    UC03 -.->|"include"| UC06
+    UC11 -.->|"extend"| UC04
+    UC07 -.->|"extend"| UC10
+    UC09 -.->|"extend"| UC03

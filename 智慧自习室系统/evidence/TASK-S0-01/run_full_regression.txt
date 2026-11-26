@@ -1,0 +1,379 @@
+............FFF.............................F.........F.......F..        [100%]
+================================== FAILURES ===================================
+____________________ test_checkout_early_leave_strict_less ____________________
+
+app = <Flask 'studyroom.app'>, client = <FlaskClient <Flask 'studyroom.app'>>
+stu_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwicm9sZSI6IlNUVSIsImp0aSI6IjVjOTMxMDU1YTB...mN2ZhZDFkYzMxMWIyNmNhZTA5IiwiaWF0IjoxNzk1Njg5MTg4LCJleHAiOjE3OTU3MTc5ODh9.0-q-JfHEu2RV3yLkYV2dlR-VWLrvgrRL2sC6BS6VoU0'}
+room_and_seat = (1, 1)
+
+    def test_checkout_early_leave_strict_less(app, client, stu_headers, room_and_seat):
+        """D-8：now < ends-30min 才记违约；恰好 30 分钟不记。"""
+        _, seat_id = room_and_seat
+        # 场景 A：31 分钟后结束 → 记违约
+        rid = _setup_window(app, client, stu_headers, seat_id, minutes_until_start=-61)
+        client.post(f"/api/v1/reservations/{rid}/check-in",
+                    headers={**stu_headers, "Idempotency-Key": ik()})
+        from studyroom.extensions import db as _db
+        from studyroom.models import Reservation
+        with client.application.app_context():
+            _db.session.get(Reservation, rid).ends_at = datetime.now() + timedelta(minutes=31)
+            _db.session.commit()
+        r = client.post(f"/api/v1/reservations/{rid}/check-out",
+                        headers={**stu_headers, "Idempotency-Key": ik()})
+>       d = r.get_json()["data"]
+            ^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'data'
+
+tests\test_checkin_checkout.py:97: KeyError
+______________________ test_checkout_after_end_rejected _______________________
+
+app = <Flask 'studyroom.app'>, client = <FlaskClient <Flask 'studyroom.app'>>
+stu_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwicm9sZSI6IlNUVSIsImp0aSI6ImI3NmNlMmM5MWN...zNjVhZDVhNmQwNTYyNmVkMTI2IiwiaWF0IjoxNzk1Njg5MTg5LCJleHAiOjE3OTU3MTc5ODl9.8KJC_g7GjoReM2tQwrrQmQ91jU4-vJavoZG4yCzWVSM'}
+room_and_seat = (1, 1)
+
+    def test_checkout_after_end_rejected(app, client, stu_headers, room_and_seat):
+        _, seat_id = room_and_seat
+        rid = _setup_window(app, client, stu_headers, seat_id, minutes_until_start=-120)
+        client.post(f"/api/v1/reservations/{rid}/check-in",
+                    headers={**stu_headers, "Idempotency-Key": ik()})
+        # ends_at 已过 → 422 CHECKOUT_NOT_ALLOWED（超时归 T-2）
+        r = client.post(f"/api/v1/reservations/{rid}/check-out",
+                        headers={**stu_headers, "Idempotency-Key": ik()})
+>       assert r.status_code == 422
+E       assert 409 == 422
+E        +  where 409 = <WrapperTestResponse streamed [409 CONFLICT]>.status_code
+
+tests\test_checkin_checkout.py:124: AssertionError
+_______________________ test_seat_freed_from_semantics ________________________
+
+self = <sqlalchemy.engine.base.Connection object at 0x00000161BAC4BD40>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x00000161BAAE3610>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x00000161BACAAF90>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x00000161BACC4160>
+parameters = [(1, 2, '2026-11-26 18:00:00.000000')]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Unpack[TupleAny]]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        evt_handled: bool = False
+        try:
+            if self._has_events or self.engine._has_events:
+                for fn in self.dispatch.before_cursor_execute:
+                    str_statement, effective_parameters = fn(
+                        self,
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                        context.executemany,
+                    )
+    
+            if self._echo:
+                self._log_info(str_statement)
+    
+                stats = context._get_cache_stats()
+    
+                self._log_parameters(
+                    effective_parameters, stats, ismulti=context.executemany
+                )
+    
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1977: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x00000161BAAE3610>
+cursor = <sqlite3.Cursor object at 0x00000161B98C9AC0>
+statement = 'INSERT INTO seat_occupancy (seat_id, reservation_id, slot_start) VALUES (?, ?, ?)'
+parameters = (1, 2, '2026-11-26 18:00:00.000000')
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x00000161BACAAF90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: UNIQUE constraint failed: seat_occupancy.seat_id, seat_occupancy.slot_start
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:1192: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+app = <Flask 'studyroom.app'>, client = <FlaskClient <Flask 'studyroom.app'>>
+stu_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwicm9sZSI6IlNUVSIsImp0aSI6IjY2OWYwOGY3YjQ...5MzJiMWIzZDg3YTIzMjgyZjFlIiwiaWF0IjoxNzk1Njg5MTg5LCJleHAiOjE3OTU3MTc5ODl9.ydW6ZupKV4zUnFx9dk2yb9PnM8FwpVo8xn7gU7M8WGI'}
+room_and_seat = (1, 1)
+
+    def test_seat_freed_from_semantics(app, client, stu_headers, room_and_seat):
+        """Q-05：只释放 slot_start > now 的后续整点。
+        构造：starts_at = 当前整点 H，共 3 格 [H,H+1,H+2]，now 落在 H 之后 → 释放 H+1 起；
+        单小时预约 → 恒 null。"""
+        _, seat_id = room_and_seat
+        hour_start = datetime.now().replace(minute=0, second=0, microsecond=0)
+        rid = _make_checked_in(app, client, stu_headers, seat_id,
+                               starts_at=hour_start, ends_at=hour_start + timedelta(hours=3))
+        r = client.post(f"/api/v1/reservations/{rid}/check-out",
+                        headers={**stu_headers, "Idempotency-Key": ik()})
+        d = r.get_json()["data"]
+        assert r.status_code == 200
+        now = datetime.now()
+        if now < hour_start + timedelta(hours=1):
+            # now 仍在第一格内（等效 14:30 场景）→ seatFreedFrom = H+1 整点
+            assert d["seatFreedFrom"] == (hour_start + timedelta(hours=1)).isoformat()
+        else:
+            freed = datetime.fromisoformat(d["seatFreedFrom"])
+            assert freed > hour_start  # 只会释放更晚的整点
+    
+        # 单小时预约：唯一格子是当前所在整点 → 无格可删
+>       rid2 = _make_checked_in(app, client, stu_headers, seat_id,
+                                starts_at=hour_start, ends_at=hour_start + timedelta(hours=1))
+
+tests\test_checkin_checkout.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_checkin_checkout.py:167: in _make_checked_in
+    shift_reservation(app, rid, starts_at=starts_at, ends_at=ends_at, sync_occupancy=True)
+tests\conftest.py:118: in shift_reservation
+    _db.session.commit()
+.venv\Lib\site-packages\sqlalchemy\orm\scoping.py:611: in commit
+    return self._proxied.commit()
+           ^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:2177: in commit
+    trans.commit(_to_root=True)
+<sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction.commit>:2: in commit
+    return target(fn, self, _to_root=_to_root)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:1412: in commit
+    self._prepare_impl()
+<sqlalchemy generated _go() wrapper for sqlalchemy.orm.session.SessionTransaction._prepare_impl>:2: in _prepare_impl
+    return target(fn, self)
+           ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py:137: in _go
+    ret_value = fn(self, *arg, **kw)
+                ^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:1386: in _prepare_impl
+    self.session.flush()
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:4626: in flush
+    self._flush(objects)
+<sqlalchemy generated warned() wrapper for sqlalchemy.orm.session.Session._flush>:2: in _flush
+    return target(fn, self, objects=objects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\deprecations.py:281: in warned
+    return fn(*args, **kwargs)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:4769: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:166: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:4730: in _flush
+    flush_context.execute()
+.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:467: in execute
+    rec.execute(self)
+.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py:643: in execute
+    util.preloaded.orm_persistence._save_obj(
+.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:92: in _save_obj
+    _emit_insert_statements(
+.venv\Lib\site-packages\sqlalchemy\orm\persistence.py:1250: in _emit_insert_statements
+    result = connection.execute(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1494: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\elements.py:534: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1714: in _execute_clauseelement
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1868: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1996: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2351: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1977: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x00000161BAAE3610>
+cursor = <sqlite3.Cursor object at 0x00000161B98C9AC0>
+statement = 'INSERT INTO seat_occupancy (seat_id, reservation_id, slot_start) VALUES (?, ?, ?)'
+parameters = (1, 2, '2026-11-26 18:00:00.000000')
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x00000161BACAAF90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: seat_occupancy.seat_id, seat_occupancy.slot_start
+E       [SQL: INSERT INTO seat_occupancy (seat_id, reservation_id, slot_start) VALUES (?, ?, ?)]
+E       [parameters: (1, 2, '2026-11-26 18:00:00.000000')]
+E       (Background on this error at: https://sqlalche.me/e/21/gkpj)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:1192: IntegrityError
+____________________ test_close_hour_24_next_day_midnight _____________________
+
+client = <FlaskClient <Flask 'studyroom.app'>>
+stu_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwicm9sZSI6IlNUVSIsImp0aSI6ImE4MTk2MjliNWU...jMzRiYTIzNzc0OGI4ZDcxNjZjIiwiaWF0IjoxNzk1Njg5MjMzLCJleHAiOjE3OTU3MTgwMzN9.4cK1YmS-7IL7luw137qhbmIq7jMAFoziWQpuMq-hkcw'}
+room_and_seat = (1, 1)
+
+    def test_close_hour_24_next_day_midnight(client, stu_headers, room_and_seat):
+        """R-2：closeHour=24 时 endsAt 写次日 T00:00:00，跨日不算跨开放边界。"""
+        from studyroom.models import Room
+        from studyroom.extensions import db as _db
+        room_id, seat_id = room_and_seat
+        with client.application.app_context():
+            _db.session.get(Room, room_id).close_hour = 24
+            _db.session.commit()
+        next_day = day(2)
+        d0 = (datetime.strptime(next_day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+>       r = book(client, stu_headers, seat_id, f"{d0}T22:00:00", f"{next_day}T00:00:00")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_reservations.py:89: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+client = <FlaskClient <Flask 'studyroom.app'>>
+headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwicm9sZSI6IlNUVSIsImp0aSI6ImE4MTk2MjliNWU...jMzRiYTIzNzc0OGI4ZDcxNjZjIiwiaWF0IjoxNzk1Njg5MjMzLCJleHAiOjE3OTU3MTgwMzN9.4cK1YmS-7IL7luw137qhbmIq7jMAFoziWQpuMq-hkcw'}
+seat_id = 1, start = '2026-11-27T22:00:00', end = '2026-11-28T00:00:00'
+expect = 201
+
+    def book(client, headers, seat_id, start, end, expect=201):
+        r = client.post("/api/v1/reservations", headers={**headers, "Idempotency-Key": ik()},
+                        json={"seatId": seat_id, "startsAt": start, "endsAt": end})
+>       assert r.status_code == expect, r.get_json()
+E       AssertionError: {'error': {'code': 'RESERVATION_BLOCKED', 'fields': {'closeHour': 22, 'openHour': 8, 'rule': 'R-open', 'ruleId': 'BR-02'}, 'message': '预约被业务规则拒绝。', 'requestId': '771b12c2d4a84428', ...}}
+E       assert 422 == 201
+E        +  where 422 = <WrapperTestResponse streamed [422 UNPROCESSABLE ENTITY]>.status_code
+
+tests\conftest.py:95: AssertionError
+_____________________ test_cancel_boundary_exactly_30min ______________________
+
+client = <FlaskClient <Flask 'studyroom.app'>>, app = <Flask 'studyroom.app'>
+stu_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwicm9sZSI6IlNUVSIsImp0aSI6IjVhNDZjNmJkMTE...mMzliZmQ3NTIwMWYwNDE4MGM3IiwiaWF0IjoxNzk1Njg5MjM3LCJleHAiOjE3OTU3MTgwMzd9.curh39wWPbR-xpgHGZppTWqUNnMMxxHhaUq_zMyMJS4'}
+room_and_seat = (1, 1)
+
+    def test_cancel_boundary_exactly_30min(client, app, stu_headers, room_and_seat):
+        """Q-03 裁决 C：now <= startsAt - 30min（含等于）可取消。"""
+        _, seat_id = room_and_seat
+        r = book(client, stu_headers, seat_id, f"{day(1)}T10:00:00", f"{day(1)}T11:00:00")
+        rid = r.get_json()["data"]["reservationId"]
+        # 把 starts_at 调到 now+30min 整 → 恰好可取消
+        from conftest import shift_reservation
+        shift_reservation(app, rid, starts_at=datetime.now().replace(microsecond=0) + timedelta(minutes=30),
+                          ends_at=datetime.now().replace(microsecond=0) + timedelta(minutes=90),
+                          sync_occupancy=True)
+        r = client.post(f"/api/v1/reservations/{rid}/cancel",
+                        headers={**stu_headers, "Idempotency-Key": ik()}, json={"reason": "有课"})
+>       assert r.status_code == 200, r.get_json()
+E       AssertionError: {'error': {'code': 'CANCEL_TOO_LATE', 'fields': {'cancelDeadline': '2026-11-26T18:33:57'}, 'message': '距预约开始不足取消时限，无法取消。', 'requestId': 'cec3a93438d04eb1', ...}}
+E       assert 422 == 200
+E        +  where 422 = <WrapperTestResponse streamed [422 UNPROCESSABLE ENTITY]>.status_code
+
+tests\test_reservations.py:212: AssertionError
+________________________ test_room_404_and_room_closed ________________________
+
+client = <FlaskClient <Flask 'studyroom.app'>>
+stu_headers = {'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyIiwicm9sZSI6IlNUVSIsImp0aSI6IjAyYjI5YTNkNWQ...0MDlhNzAyNjUyNmIwMDcxMGJjIiwiaWF0IjoxNzk1Njg5MjQxLCJleHAiOjE3OTU3MTgwNDF9.aOQiSpbspyXPzr1qAf1NQDyt3J4buVLoaMKKRGxZurw'}
+room_and_seat = (1, 1)
+
+    def test_room_404_and_room_closed(client, stu_headers, room_and_seat):
+        room_id, seat_id = room_and_seat
+        r = client.get(f"/api/v1/rooms/9999/seats?date={day(1)}", headers=stu_headers)
+        assert r.status_code == 404
+        # 房间停用 → API-05 全格 ROOM_CLOSED（200 不报 422）
+        from studyroom.extensions import db as _db
+        from studyroom.models import Room
+        with client.application.app_context():
+            _db.session.get(Room, room_id).active = False
+            _db.session.commit()
+        r = client.get(f"/api/v1/seats/{seat_id}/availability?date={day(1)}", headers=stu_headers)
+        assert r.status_code == 200
+>       assert all(s["status"] == "ROOM_CLOSED" for s in r.get_json()["data"]["slots"])
+E       assert False
+E        +  where False = all(<generator object test_room_404_and_room_closed.<locals>.<genexpr> at 0x00000161C1283920>)
+
+tests\test_seats.py:76: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_checkin_checkout.py::test_checkout_early_leave_strict_less
+FAILED tests/test_checkin_checkout.py::test_checkout_after_end_rejected - ass...
+FAILED tests/test_checkin_checkout.py::test_seat_freed_from_semantics - sqlal...
+FAILED tests/test_reservations.py::test_close_hour_24_next_day_midnight - Ass...
+FAILED tests/test_reservations.py::test_cancel_boundary_exactly_30min - Asser...
+FAILED tests/test_seats.py::test_room_404_and_room_closed - assert False
+6 failed, 59 passed in 58.39s

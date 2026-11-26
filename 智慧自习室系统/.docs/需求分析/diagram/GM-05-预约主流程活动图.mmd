@@ -1,0 +1,29 @@
+flowchart TD
+    Start((●)) --> Login[已登录学生发起选座]
+    Login --> Query[按日期/时段/自习室/属性筛选<br/>系统计算可用座位集合 FR-05/FR-07]
+    Query --> Pick[选定座位与时段并提交]
+    Pick --> Chk1{黑名单限制期内?<br/>F-8/BR-07}
+    Chk1 -->|是| Deny1[拒绝: 提示限制截止日期<br/>UC-12] --> End1((◉))
+    Chk1 -->|否| Chk2{开始时间是过去时间<br/>或超出 7 天窗口? F-1/P-2}
+    Chk2 -->|是| Deny2[拒绝: 提示允许范围] --> End1
+    Chk2 -->|否| Chk3{座位停用/维护中? F-4}
+    Chk3 -->|是| Deny3[拒绝: 座位不可用] --> End1
+    Chk3 -->|否| Chk4{与本人预约时段重叠<br/>或已有 2 个有效预约? F-2/P-1}
+    Chk4 -->|是| Deny4[拒绝: 列出冲突单号/上限提示] --> End1
+    Chk4 -->|否| Chk5{该座位该时段已被占用?<br/>BR-04/并发 UC-13}
+    Chk5 -->|是| Deny5[拒绝: 时段已被占用<br/>引导重选] --> End1
+    Chk5 -->|否| Create[生成“待签到”预约单<br/>座位时段→已预约 ST-01/ST-08<br/>推送预约成功通知]
+    Create --> Wait{学生按时到场?}
+    Wait -->|取消: 距开始≥30分钟 P-4| Cancel[预约单→已取消 ST-02<br/>座位时段释放 ST-09<br/>不计违约 UC-02] --> End1
+    Wait -->|开始后 15 分钟内到场| CheckIn[学生点击签到<br/>预约单→已签到 ST-03<br/>座位→使用中 ST-10 UC-03]
+    Wait -->|超时未签到 C-1| AutoViol1[定时任务判违约<br/>预约单→已违约 ST-05<br/>释放座位、违约分+1、通知 UC-06]
+    AutoViol1 --> End1
+    CheckIn --> Use[使用中]
+    Use -->|提前离开≥30分钟 C-3| Early[记“早退”违约<br/>回收剩余时段]
+    Use -->|结束+15分钟未签退 C-2| AutoViol2[定时任务记“超时未签退”违约]
+    Use -->|正常签退| CheckOut[预约单→已签退 ST-04<br/>剩余时段释放 ST-11]
+    Early --> Score
+    AutoViol2 --> End1
+    CheckOut --> Score{签退后评价? BR-10/P-6}
+    Score -->|提交 1~5 星 + 文字| Review[创建评价记录 UC-09<br/>每预约单限 1 条 F-11] --> End1
+    Score -->|跳过| End1
